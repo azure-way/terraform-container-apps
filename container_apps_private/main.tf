@@ -37,9 +37,9 @@ resource "azurerm_container_app_environment" "aca_env" {
   resource_group_name        = azurerm_resource_group.rg.name
   log_analytics_workspace_id = azurerm_log_analytics_workspace.aca_logs.id
 
-  infrastructure_subnet_id       = module.virtual_network.app_subnet_id
+  infrastructure_subnet_id           = module.virtual_network.app_subnet_id
   infrastructure_resource_group_name = "${local.prefix}-aca-infra"
-  internal_load_balancer_enabled = true
+  internal_load_balancer_enabled     = true
 
   workload_profile {
     name                  = "Consumption"
@@ -105,7 +105,7 @@ resource "azurerm_public_ip" "public_ip" {
   resource_group_name = azurerm_resource_group.rg.name
   location            = azurerm_resource_group.rg.location
   allocation_method   = "Dynamic"
-  sku = "Basic"
+  sku                 = "Basic"
 }
 
 resource "azurerm_network_interface" "jump_nic" {
