@@ -21,7 +21,7 @@ variable "address_space" {
 variable "subnet_address_prefix_map" {
   type = map(list(string))
   default = {
-    "app" = ["40.0.0.0/23"],
+    "app" = ["40.0.0.0/27"],
     "vm"  = ["40.0.2.0/26"]
   }
 }
