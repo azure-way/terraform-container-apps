@@ -2,7 +2,8 @@ locals {
   prefix     = "${random_pet.rg.id}-${var.environment}"
   prefixSafe = "${random_pet.rg.id}${var.environment}"
 
-  image_name = "containerapps-helloworld:latest"
+  image_name               = "containerapps-helloworld:latest"
+  servicebus_consumer_image = "sample-service-bus-consumer:latest"
 }
 
 data "azurerm_client_config" "current" {}
@@ -92,6 +93,19 @@ resource "null_resource" "acr_import" {
             --name ${module.container_registry.name} \
             --source mcr.microsoft.com/azuredocs/${local.image_name} \
             --image ${local.image_name}
+      EOT
+  }
+
+  depends_on = [time_sleep.wait_60_seconds]
+}
+
+resource "null_resource" "acr_build_servicebus_consumer" {
+  provisioner "local-exec" {
+    command = <<-EOT
+        az acr build \
+            --registry ${module.container_registry.name} \
+            --image ${local.servicebus_consumer_image} \
+            ../container_apps_servicebus/1_samples/ContainerAppsServiceBusSample
       EOT
   }
 
@@ -234,23 +248,18 @@ resource "azurerm_container_app_job" "event_driven_job" {
   template {
     container {
       name   = "event-job"
-      image  = "${module.container_registry.url}/${local.image_name}"
+      image  = "${module.container_registry.url}/${local.servicebus_consumer_image}"
       cpu    = 0.25
       memory = "0.5Gi"
 
       env {
-        name        = "SERVICE_BUS_CONNECTION_STRING"
+        name        = "serviceBusConnectionString"
         secret_name = "service-bus-connection-string"
       }
 
       env {
-        name  = "SERVICE_BUS_QUEUE"
+        name  = "serviceBusQueue"
         value = azurerm_servicebus_queue.job_queue.name
-      }
-
-      env {
-        name  = "JOB_TYPE"
-        value = "event-driven"
       }
     }
   }
@@ -265,7 +274,7 @@ resource "azurerm_container_app_job" "event_driven_job" {
     server   = module.container_registry.url
   }
 
-  depends_on = [null_resource.acr_import]
+  depends_on = [null_resource.acr_build_servicebus_consumer]
 }
 
 output "manual_job_name" {
