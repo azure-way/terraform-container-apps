@@ -204,7 +204,7 @@ resource "azurerm_container_app" "app2" {
 module "path_based_routing" {
   source = "./modules/path_based_routing"
 
-  routing_name = "httppathbasedrouting1"
+  routing_name = "default"
   container_environment_id = azurerm_container_app_environment.app_env.id
 
   rules = [
@@ -213,7 +213,7 @@ module "path_based_routing" {
       routes = [
         {
           match = {
-            path = "/sampleapi/*"
+            path = "/sampleapi"
             caseSensitive = false
           }
           action = {
@@ -232,7 +232,7 @@ module "path_based_routing" {
       routes = [
         {
           match = {
-            path = "/app2/*"
+            path = "/app2"
             caseSensitive = false
           }
           action = {
