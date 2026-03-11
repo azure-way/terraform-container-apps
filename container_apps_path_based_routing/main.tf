@@ -204,6 +204,7 @@ resource "azurerm_container_app" "app2" {
 module "path_based_routing" {
   source = "./modules/path_based_routing"
 
+  routing_name = "http-path-based-routing_1"
   container_environment_id = azurerm_container_app_environment.app_env.id
 
   rules = [

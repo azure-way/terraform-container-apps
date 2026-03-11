@@ -11,6 +11,10 @@ variable "container_environment_id" {
   description = "The ID of the container environment"
 }
 
+variable "routing_name" {
+  description = "The name of the HTTP route configuration"
+}
+
 variable "rules" {
   description = "The rules for the HTTP route configuration"
   type = list(object(
@@ -41,7 +45,7 @@ variable "rules" {
 
 resource "azapi_resource" "symbolicname" {
   type      = "Microsoft.App/managedEnvironments/httpRouteConfigs@2025-10-02-preview"
-  name      = "string"
+  name      = var.routing_name
   parent_id = var.container_environment_id
   body = {
     properties = {
