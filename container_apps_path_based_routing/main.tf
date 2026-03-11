@@ -73,13 +73,6 @@ resource "azurerm_container_app_environment" "app_env" {
   infrastructure_resource_group_name = "${azurerm_resource_group.rg.name}-infra"
 
   workload_profile {
-    name                  = "test-1"
-    workload_profile_type = "D4"
-    maximum_count         = 1
-    minimum_count         = 1
-  }
-
-  workload_profile {
     name                  = "Consumption"
     workload_profile_type = "Consumption"
     maximum_count         = 0
@@ -169,7 +162,7 @@ resource "azurerm_container_app" "app2" {
   container_app_environment_id = azurerm_container_app_environment.app_env.id
   resource_group_name          = azurerm_resource_group.rg.name
   revision_mode                = "Single"
-  workload_profile_name        = "test-1"
+  workload_profile_name        = "Consumption"
 
   identity {
     type         = "SystemAssigned, UserAssigned"
