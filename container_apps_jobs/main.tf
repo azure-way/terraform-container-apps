@@ -2,7 +2,6 @@ locals {
   prefix     = "${random_pet.rg.id}-${var.environment}"
   prefixSafe = "${random_pet.rg.id}${var.environment}"
 
-  image_name               = "containerapps-helloworld:latest"
   servicebus_consumer_image = "sample-service-bus-consumer:latest"
 }
 
@@ -86,26 +85,14 @@ resource "time_sleep" "wait_60_seconds" {
   create_duration = "60s"
 }
 
-resource "null_resource" "acr_import" {
-  provisioner "local-exec" {
-    command = <<-EOT
-        az acr import \
-            --name ${module.container_registry.name} \
-            --source mcr.microsoft.com/azuredocs/${local.image_name} \
-            --image ${local.image_name}
-      EOT
-  }
-
-  depends_on = [time_sleep.wait_60_seconds]
-}
-
 resource "null_resource" "acr_build_servicebus_consumer" {
   provisioner "local-exec" {
     command = <<-EOT
         az acr build \
             --registry ${module.container_registry.name} \
             --image ${local.servicebus_consumer_image} \
-            ../container_apps_servicebus/1_samples/ContainerAppsServiceBusSample
+            --platform linux/amd64 \
+            ./ContainerAppsServiceBusSampleConsumer
       EOT
   }
 
@@ -123,7 +110,7 @@ resource "azurerm_servicebus_queue" "job_queue" {
   name         = "job-tasks"
   namespace_id = azurerm_servicebus_namespace.sb.id
 
-  enable_partitioning = false
+  partitioning_enabled = false
 }
 
 resource "azurerm_container_app_job" "manual_job" {
@@ -139,16 +126,41 @@ resource "azurerm_container_app_job" "manual_job" {
     replica_completion_count = 1
   }
 
+  secret {
+    name  = "service-bus-connection-string"
+    value = azurerm_servicebus_namespace.sb.default_primary_connection_string
+  }
+
   template {
     container {
       name   = "manual-job"
-      image  = "${module.container_registry.url}/${local.image_name}"
+      image  = "${module.container_registry.url}/${local.servicebus_consumer_image}"
       cpu    = 0.25
       memory = "0.5Gi"
 
       env {
         name  = "JOB_TYPE"
         value = "manual"
+      }
+
+      env {
+        name        = "serviceBusConnectionString"
+        secret_name = "service-bus-connection-string"
+      }
+
+      env {
+        name  = "serviceBusQueue"
+        value = azurerm_servicebus_queue.job_queue.name
+      }
+
+      env {
+        name  = "MAX_MESSAGES_PER_RUN"
+        value = "20"
+      }
+
+      env {
+        name  = "MAX_IDLE_WAIT_SECONDS"
+        value = "15"
       }
     }
   }
@@ -163,7 +175,7 @@ resource "azurerm_container_app_job" "manual_job" {
     server   = module.container_registry.url
   }
 
-  depends_on = [null_resource.acr_import]
+  depends_on = [null_resource.acr_build_servicebus_consumer]
 }
 
 resource "azurerm_container_app_job" "scheduled_job" {
@@ -180,16 +192,41 @@ resource "azurerm_container_app_job" "scheduled_job" {
     replica_completion_count = 1
   }
 
+  secret {
+    name  = "service-bus-connection-string"
+    value = azurerm_servicebus_namespace.sb.default_primary_connection_string
+  }
+
   template {
     container {
       name   = "scheduled-job"
-      image  = "${module.container_registry.url}/${local.image_name}"
+      image  = "${module.container_registry.url}/${local.servicebus_consumer_image}"
       cpu    = 0.25
       memory = "0.5Gi"
 
       env {
         name  = "JOB_TYPE"
         value = "scheduled"
+      }
+
+      env {
+        name        = "serviceBusConnectionString"
+        secret_name = "service-bus-connection-string"
+      }
+
+      env {
+        name  = "serviceBusQueue"
+        value = azurerm_servicebus_queue.job_queue.name
+      }
+
+      env {
+        name  = "MAX_MESSAGES_PER_RUN"
+        value = "20"
+      }
+
+      env {
+        name  = "MAX_IDLE_WAIT_SECONDS"
+        value = "15"
       }
     }
   }
@@ -204,7 +241,7 @@ resource "azurerm_container_app_job" "scheduled_job" {
     server   = module.container_registry.url
   }
 
-  depends_on = [null_resource.acr_import]
+  depends_on = [null_resource.acr_build_servicebus_consumer]
 }
 
 resource "azurerm_container_app_job" "event_driven_job" {
@@ -225,12 +262,12 @@ resource "azurerm_container_app_job" "event_driven_job" {
       polling_interval_in_seconds = 30
 
       rules {
-        name = "servicebus-queue-rule"
-        type = "azure-servicebus"
+        name             = "servicebus-queue-rule"
+        custom_rule_type = "azure-servicebus"
         metadata = {
           queueName    = azurerm_servicebus_queue.job_queue.name
           namespace    = azurerm_servicebus_namespace.sb.name
-          messageCount = "5"
+          messageCount = "20"
         }
         authentication {
           secret_name       = "service-bus-connection-string"
@@ -260,6 +297,16 @@ resource "azurerm_container_app_job" "event_driven_job" {
       env {
         name  = "serviceBusQueue"
         value = azurerm_servicebus_queue.job_queue.name
+      }
+
+      env {
+        name  = "MAX_MESSAGES_PER_RUN"
+        value = "20"
+      }
+
+      env {
+        name  = "MAX_IDLE_WAIT_SECONDS"
+        value = "15"
       }
     }
   }
