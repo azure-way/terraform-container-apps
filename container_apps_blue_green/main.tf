@@ -185,7 +185,7 @@ resource "azurerm_container_app" "app" {
 module "blue_green_routing" {
   source = "./modules/path_based_routing"
 
-  routing_name             = "blue-green"
+  routing_name             = "bluegreen"
   container_environment_id = azurerm_container_app_environment.app_env.id
 
   rules = [

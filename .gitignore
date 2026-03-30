@@ -38,3 +38,4 @@ terraform.rc
 obj/
 bin/
 .vscode/
+container_apps_blue_green/.terraform.lock.hcl
