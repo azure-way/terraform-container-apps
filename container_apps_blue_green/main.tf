@@ -1,8 +1,6 @@
 locals {
   prefix     = "${random_pet.rg.id}-${var.environment}"
   prefixSafe = "${random_pet.rg.id}${var.environment}"
-
-  image_name = "containerapps-helloworld:latest"
 }
 
 data "azurerm_client_config" "current" {}
@@ -90,8 +88,12 @@ resource "null_resource" "acr_import" {
     command = <<-EOT
         az acr import \
             --name ${module.container_registry.name} \
-            --source mcr.microsoft.com/azuredocs/${local.image_name} \
-            --image ${local.image_name}
+            --source mcr.microsoft.com/azuredocs/containerapps-helloworld:latest \
+            --image ${var.blue_image} && \
+        az acr import \
+            --name ${module.container_registry.name} \
+            --source mcr.microsoft.com/k8se/samples/sample-service-redis:latest \
+            --image ${var.green_image}
       EOT
   }
 
@@ -124,17 +126,17 @@ resource "azurerm_container_app" "app" {
   }
 
   template {
-    revision_suffix = "blue"
+    revision_suffix = var.production_label == "blue" ? var.blue_revision_suffix : var.green_revision_suffix
 
     container {
-      name   = "sampleapi"
-      image  = "${module.container_registry.url}/${local.image_name}"
+      name   = "sample-app"
+      image  = "${module.container_registry.url}/${var.production_label == "blue" ? var.blue_image : var.green_image}"
       cpu    = 0.25
       memory = "0.5Gi"
 
       env {
         name  = "REVISION_LABEL"
-        value = "blue"
+        value = var.production_label
       }
     }
 
@@ -145,19 +147,26 @@ resource "azurerm_container_app" "app" {
   ingress {
     allow_insecure_connections = false
     external_enabled           = true
-    target_port                = 80
+    target_port                = 8080
 
-    traffic_weight {
-      percentage      = 100
-      label           = "blue"
-      latest_revision = false
-      revision_suffix = "blue"
+    # Blue — present when production_label is "blue" OR blue-green is enabled
+    dynamic "traffic_weight" {
+      for_each = (var.enable_blue_green || var.production_label == "blue") ? [1] : []
+      content {
+        revision_suffix = var.blue_revision_suffix
+        label           = "blue"
+        percentage      = var.production_label == "blue" ? 100 : 0
+      }
     }
 
-    traffic_weight {
-      percentage      = 0
-      label           = "green"
-      latest_revision = true
+    # Green — present when production_label is "green" OR blue-green is enabled
+    dynamic "traffic_weight" {
+      for_each = (var.enable_blue_green || var.production_label == "green") ? [1] : []
+      content {
+        revision_suffix = var.green_revision_suffix
+        label           = "green"
+        percentage      = var.production_label == "green" ? 100 : 0
+      }
     }
   }
 
@@ -184,6 +193,7 @@ resource "azurerm_container_app" "app" {
 
 module "blue_green_routing" {
   source = "./modules/path_based_routing"
+  count  = var.enable_blue_green ? 1 : 0
 
   routing_name             = "bluegreen"
   container_environment_id = azurerm_container_app_environment.app_env.id
@@ -206,12 +216,12 @@ module "blue_green_routing" {
         {
           containerApp = azurerm_container_app.app.name
           label        = "blue"
-          weight       = 100
+          weight       = var.production_label == "blue" ? 100 : 0
         },
         {
           containerApp = azurerm_container_app.app.name
           label        = "green"
-          weight       = 0
+          weight       = var.production_label == "green" ? 100 : 0
         }
       ]
     }
@@ -228,10 +238,10 @@ output "app_url" {
 
 output "blue_label_url" {
   description = "Direct URL to the blue revision (via label)"
-  value       = "https://${azurerm_container_app.app.name}---blue.${azurerm_container_app_environment.app_env.default_domain}"
+  value       = (var.production_label == "blue" || var.enable_blue_green) ? "https://${azurerm_container_app.app.name}---blue.${azurerm_container_app_environment.app_env.default_domain}" : null
 }
 
 output "green_label_url" {
   description = "Direct URL to the green revision (via label)"
-  value       = "https://${azurerm_container_app.app.name}---green.${azurerm_container_app_environment.app_env.default_domain}"
+  value       = (var.production_label == "green" || var.enable_blue_green) ? "https://${azurerm_container_app.app.name}---green.${azurerm_container_app_environment.app_env.default_domain}" : null
 }
